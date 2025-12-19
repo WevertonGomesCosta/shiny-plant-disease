@@ -1,0 +1,12 @@
+name: analise-severidade-junior
+title: analise-severidade-junior
+username: weverton-costa
+account: weverton-costa
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16335525
+bundleId: 11344130
+url: https://weverton-costa.shinyapps.io/analise-severidade-junior/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
