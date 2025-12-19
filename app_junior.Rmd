@@ -16,13 +16,23 @@ runtime: shiny
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
-# Pacotes (Adicionado shinyjs para controle de interface)
-pkgs <- c("shiny", "DT", "base64enc", "BiocManager", "shinycssloaders")
-for(p in pkgs) if(!require(p, character.only=T)) install.packages(p)
+# --- CORREÇÃO 1: AUMENTAR LIMITE DE UPLOAD (30MB) ---
+options(shiny.maxRequestSize = 30*1024^2)
 
-if (!require("EBImage", quietly = TRUE)) {
-  BiocManager::install("EBImage")
-  library("EBImage")
+
+# --- CORREÇÃO 2: DEFINIR REPOSITÓRIOS DO BIOCONDUCTOR ---
+# Isso impede erro de instalação no servidor
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+options(repos = c(BiocManager::repositories(), CRAN = "[https://cloud.r-project.org](https://cloud.r-project.org)"))
+
+# Pacotes
+pkgs <- c("shiny", "DT", "base64enc", "shinycssloaders", "EBImage")
+for(p in pkgs) {
+  if(!require(p, character.only=T)) {
+    tryCatch(BiocManager::install(p, update=FALSE, ask=FALSE), error=function(e) install.packages(p))
+    library(p, character.only=T)
+  }
 }
 ```
 
@@ -31,9 +41,9 @@ if (!require("EBImage", quietly = TRUE)) {
 Esta ferramenta unifica a análise detalhada (para calibração) e a análise em lote (para produtividade).
 
 ```{r app_wide, echo=FALSE}
-# --- CONFIGURAÇÕES FIXAS (HARDCODED) ---
-PARAM_FUNDO <- 0.3   # Limiar para separar a folha do fundo
-PARAM_DOENCA <- 0.1  # Sensibilidade para detectar a doença
+# --- CONFIGURAÇÕES FIXAS ---
+PARAM_FUNDO <- 0.3   
+PARAM_DOENCA <- 0.1  
 
 # --- FUNÇÕES AUXILIARES ---
 force_landscape <- function(img) {
@@ -51,43 +61,8 @@ img_to_base64 <- function(img) {
   }, error = function(e) return(""))
 }
 
-# --- CSS SIMPLIFICADO ---
-custom_css <- "
-  .big-metric { 
-    text-align: center; 
-    padding: 20px; 
-    background-color: #f7f9f9; 
-    border: 2px solid #2c3e50; 
-    border-radius: 10px; 
-    margin-top: 20px;
-  }
-  .big-metric h2 { color: #7f8c8d; font-size: 1.2em; margin: 0; }
-  .big-metric h1 { color: #e74c3c; font-size: 3.5em; font-weight: bold; margin: 5px 0 0 0; }
-  .img-box { 
-    border: 1px solid #ddd; 
-    background: #eee; 
-    min-height: 250px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
-  }
-  .img-box img { max-width: 100%; max-height: 300px; }
-  
-  /* Estilo do Rodapé */
-  .author-footer {
-    text-align: center;
-    margin-top: 40px;
-    padding: 20px;
-    border-top: 1px solid #dcdcdc;
-    background-color: #fdfdfd;
-    color: #555;
-    font-size: 0.9em;
-  }
-"
-
 # --- UI ---
 ui <- navbarPage("Análise Simplificada", id = "nav_main",
-  tags$head(tags$style(HTML(custom_css))),
 
   # ABA 1: INDIVIDUAL
   tabPanel("Análise Individual", icon = icon("microscope"),
@@ -95,7 +70,8 @@ ui <- navbarPage("Análise Simplificada", id = "nav_main",
       column(3,
         wellPanel(
           h4("Carregar Imagem"),
-          fileInput("file_single", NULL, accept = c("image/png", "image/jpeg"))
+          fileInput("file_single", NULL, accept = c("image/png", "image/jpeg")),
+          helpText("Suporta imagens até 30MB.")
           ),
         # Resultado da Severidade em destaque
         uiOutput("out_severidade_box")
@@ -129,7 +105,7 @@ ui <- navbarPage("Análise Simplificada", id = "nav_main",
     )
   ),
 
-# RODAPÉ ATUALIZADO
+  # RODAPÉ
   footer = div(class = "author-footer",
       # Linha 1: Principal
       div(
@@ -145,9 +121,9 @@ ui <- navbarPage("Análise Simplificada", id = "nav_main",
       
       # Linha 3: Produzido por
       div(class = "footer-note",
-        "*Produzido por: Costa, W.G.; ", " | ",
+        "*Produzido por: Costa, W.G.; ", 
         em("weverton.costa@ufv.br"), " | ",
-        tags$a(href="https://wevertongomescosta.github.io/", target="_blank", "https://wevertongomescosta.github.io/")
+        tags$a(href="[https://wevertongomescosta.github.io/](https://wevertongomescosta.github.io/)", target="_blank", "wevertongomescosta.github.io")
       )
   )
 )
@@ -163,40 +139,51 @@ server <- function(input, output, session) {
   observeEvent(input$file_single, {
     req(input$file_single)
     
-    # 1. Ler e Preparar
-    img <- readImage(input$file_single$datapath)
-    if(colorMode(img) == Grayscale) img <- toRGB(img)
-    if(length(dim(img)) == 3 && dim(img)[3] == 4) img <- img[,,1:3]
-    img <- force_landscape(img)
-    img <- resize(img, w=600)
-    colorMode(img) <- Color
-    
-    vals_single$orig <- img
-    
-    # 2. Processar Máscara (Fundo)
-    mask <- (img[,,2] + img[,,1]) > (img[,,3] + PARAM_FUNDO)
-    mask_img <- fillHull(closing(Image(mask, colormode="Grayscale"), makeBrush(5, shape='disc')))
-    
-    # Pegar maior objeto (folha)
-    labels <- bwlabel(mask_img)
-    if(max(labels) > 0) {
-      mask_final <- (labels == which.max(computeFeatures.shape(labels)[,"s.area"]))
-    } else {
-      mask_final <- (as.array(mask_img) > 0)
-    }
-    vals_single$mask <- mask_final
-    
-    # 3. Processar Doença
-    mask_doenca <- ((img[,,1] - img[,,2]) > PARAM_DOENCA) & mask_final
-    
-    # 4. Calcular Severidade
-    af <- sum(mask_final)
-    ad <- sum(mask_doenca)
-    sev <- if(af > 0) (ad/af)*100 else 0
-    vals_single$sev <- sev
-    
-    # Imagem Visual da Doença
-    vals_single$res <- paintObjects(Image(mask_doenca, colormode="Grayscale"), img, col="red", opac=c(1, 0.7), thick=TRUE)
+    # TryCatch para evitar travamento se imagem for corrompida
+    tryCatch({
+      # 1. Ler e Preparar
+      img <- readImage(input$file_single$datapath)
+      if(colorMode(img) == Grayscale) img <- toRGB(img)
+      if(length(dim(img)) == 3 && dim(img)[3] == 4) img <- img[,,1:3]
+      img <- force_landscape(img)
+      
+      # OTIMIZAÇÃO: Reduzir para 500px para economizar RAM no servidor gratuito
+      img <- resize(img, w=500) 
+      colorMode(img) <- Color
+      
+      vals_single$orig <- img
+      
+      # 2. Processar Máscara (Fundo)
+      mask <- (img[,,2] + img[,,1]) > (img[,,3] + PARAM_FUNDO)
+      mask_img <- fillHull(closing(Image(mask, colormode="Grayscale"), makeBrush(5, shape='disc')))
+      
+      # Pegar maior objeto (folha)
+      labels <- bwlabel(mask_img)
+      if(max(labels) > 0) {
+        mask_final <- (labels == which.max(computeFeatures.shape(labels)[,"s.area"]))
+      } else {
+        mask_final <- (as.array(mask_img) > 0)
+      }
+      vals_single$mask <- mask_final
+      
+      # 3. Processar Doença
+      mask_doenca <- ((img[,,1] - img[,,2]) > PARAM_DOENCA) & mask_final
+      
+      # 4. Calcular Severidade
+      af <- sum(mask_final)
+      ad <- sum(mask_doenca)
+      sev <- if(af > 0) (ad/af)*100 else 0
+      vals_single$sev <- sev
+      
+      # Imagem Visual da Doença
+      vals_single$res <- paintObjects(Image(mask_doenca, colormode="Grayscale"), img, col="red", opac=c(1, 0.7), thick=TRUE)
+      
+      # CORREÇÃO: Limpar memória explicitamente
+      gc() 
+      
+    }, error = function(e) {
+      showNotification("Erro ao processar imagem. Tente uma menor.", type="error")
+    })
   })
 
   # Outputs Individuais
@@ -233,7 +220,7 @@ server <- function(input, output, session) {
           img <- readImage(path)
           if(colorMode(img) == Grayscale) img <- toRGB(img)
           if(length(dim(img)) == 3 && dim(img)[3] == 4) img <- img[,,1:3]
-          img <- resize(img, w=500) # Reduz um pouco para acelerar lote
+          img <- resize(img, w=500) # Redução segura
           
           # Cálculo Máscara (Folha)
           mask <- (img[,,2] + img[,,1]) > (img[,,3] + PARAM_FUNDO)
@@ -255,8 +242,11 @@ server <- function(input, output, session) {
             Pixels_Doentes = ad
           ))
           
+          # Limpeza a cada iteração
+          rm(img, mask, mask_img, mask_doenca)
+          gc() 
+          
         }, error = function(e) {
-           # Em caso de erro na imagem, preenche com NA
            temp_df <- rbind(temp_df, data.frame(Imagem = fname, Severidade_Percentual = NA, Pixels_Totais = NA, Pixels_Doentes = NA))
         })
         incProgress(1/n, detail = paste("Imagem", i))
@@ -278,6 +268,5 @@ server <- function(input, output, session) {
   )
 }
 
-# --- RODAR APLICAÇÃO ---
-shinyApp(ui, server, options = list(height = 750))
+shinyApp(ui, server, options = list(height = 800))
 ```
