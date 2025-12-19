@@ -31,13 +31,6 @@ if (!require("EBImage", quietly = TRUE)) {
 Esta ferramenta unifica a análise detalhada (para calibração) e a análise em lote (para produtividade).
 
 ```{r app_wide, echo=FALSE}
-# --- PACOTES ---
-library(shiny)
-library(EBImage)       
-library(DT)
-library(shinycssloaders)
-library(base64enc)
-
 # --- CONFIGURAÇÕES FIXAS (HARDCODED) ---
 PARAM_FUNDO <- 0.3   # Limiar para separar a folha do fundo
 PARAM_DOENCA <- 0.1  # Sensibilidade para detectar a doença
