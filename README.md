@@ -23,3 +23,32 @@ install.packages(c("shiny", "DT", "shinycssloaders", "base64enc"))
 
 # Rode o app direto do GitHub:
 shiny::runGitHub("NOME-DO-SEU-REPO", "SEU-USUARIO-GITHUB")
+
+```
+
+> **Nota:** Substitua `SEU-USUARIO-GITHUB` pelo seu usuário e `NOME-DO-SEU-REPO` pelo nome que você deu ao repositório.
+
+## 🛠️ Tecnologias Utilizadas
+
+* **Linguagem:** R
+* **Framework:** Shiny
+* **Processamento de Imagem:** EBImage (Bioconductor)
+
+## ✍️ Autores e Créditos
+
+**Autor:**
+
+* **Silva Júnior, A. C.** ¹
+* ¹ Pós-doutorando, EPAMIG, MG, Brasil.
+* Contato: antonio.silva.c.junior@gmail.com
+
+
+
+**Desenvolvimento:**
+
+* Produzido por: **Costa, W.G.**
+* Portfólio: [https://wevertongomescosta.github.io/](https://wevertongomescosta.github.io/)
+
+---
+
+*Atualizado em: Dezembro de 2025*
